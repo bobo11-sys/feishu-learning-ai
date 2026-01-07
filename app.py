@@ -1,17 +1,28 @@
-from flask import Flask, request, jsonify
-import requests
-import json
+import sys
 import os
-from datetime import datetime, timedelta
+import json
 import re
+import requests
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+from flask import Flask, request, jsonify
 
-app = Flask(__name__)
+# 添加调试信息到stderr（会在Vercel Runtime Logs中显示）
+print("=== app.py 开始执行 ===", file=sys.stderr)
+print(f"Python版本: {sys.version}", file=sys.stderr)
+print(f"当前工作目录: {os.getcwd()}", file=sys.stderr)
+print(f"环境变量 VERCEL: {os.environ.get('VERCEL')}", file=sys.stderr)
 
 # 从环境变量获取配置
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 FEISHU_APP_ID = os.environ.get("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.environ.get("FEISHU_APP_SECRET")
+
+print(f"DEEPSEEK_API_KEY: {'已设置' if DEEPSEEK_API_KEY else '未设置'}", file=sys.stderr)
+print(f"FEISHU_APP_ID: {'已设置' if FEISHU_APP_ID else '未设置'}", file=sys.stderr)
+print(f"FEISHU_APP_SECRET: {'已设置' if FEISHU_APP_SECRET else '未设置'}", file=sys.stderr)
+
+app = Flask(__name__)
 
 class IntelligentLearningCoach:
     def __init__(self):
@@ -43,7 +54,7 @@ class IntelligentLearningCoach:
             self.token_expiry = datetime.now() + timedelta(minutes=110)
             return self.access_token
         except Exception as e:
-            print(f"获取飞书token失败: {e}")
+            print(f"获取飞书token失败: {e}", file=sys.stderr)
             return None
     
     def fetch_table_data(self, app_token, table_id, record_type=None, recent_days=7, max_records=100):
@@ -104,7 +115,7 @@ class IntelligentLearningCoach:
             return items
             
         except Exception as e:
-            print(f"获取表格数据失败({record_type}): {e}")
+            print(f"获取表格数据失败({record_type}): {e}", file=sys.stderr)
             return []
     
     def get_targets(self, app_token, table_id):
@@ -327,7 +338,7 @@ class IntelligentLearningCoach:
             return result
             
         except Exception as e:
-            print(f"DeepSeek API调用失败: {e}")
+            print(f"DeepSeek API调用失败: {e}", file=sys.stderr)
             return {
                 "problem_diagnosis": "AI分析系统暂时不可用。建议：1. 回顾类似问题的成功经验 2. 从方法库中选择一个相关方法尝试 3. 保持当前学习节奏",
                 "diagnostic_labels": ["系统维护"],
@@ -369,7 +380,7 @@ class IntelligentLearningCoach:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            print(f"更新飞书表格失败: {e}")
+            print(f"更新飞书表格失败: {e}", file=sys.stderr)
             return {"error": str(e)}
 
 coach = IntelligentLearningCoach()
@@ -390,6 +401,7 @@ def home():
 
 @app.route('/health')
 def health():
+    print("=== 健康检查端点被调用 ===", file=sys.stderr)
     token_status = "available" if coach.get_feishu_token() else "unavailable"
     
     return jsonify({
@@ -475,7 +487,7 @@ def analyze():
         }), 400
     except Exception as e:
         error_msg = f"处理请求失败: {str(e)}"
-        print(error_msg)
+        print(error_msg, file=sys.stderr)
         return jsonify({
             "success": False,
             "error": error_msg,
@@ -485,6 +497,7 @@ def analyze():
 
 @app.route('/test', methods=['GET'])
 def test_endpoint():
+    print("=== 测试端点被调用 ===", file=sys.stderr)
     return jsonify({
         "status": "test_endpoint_ready",
         "method": "GET",
@@ -492,18 +505,25 @@ def test_endpoint():
         "instructions": "发送POST请求到/analyze测试分析功能"
     })
 
+# 只在本地运行，不在Vercel上运行app.run()
 if __name__ == '__main__':
-    missing_envs = []
-    if not DEEPSEEK_API_KEY:
-        missing_envs.append("DEEPSEEK_API_KEY")
-    if not FEISHU_APP_ID:
-        missing_envs.append("FEISHU_APP_ID")
-    if not FEISHU_APP_SECRET:
-        missing_envs.append("FEISHU_APP_SECRET")
-    
-    if missing_envs:
-        print(f"警告：缺少环境变量: {', '.join(missing_envs)}")
-        print("请在Vercel环境变量中配置这些变量")
-    
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # 检查是否是Vercel环境
+    if os.environ.get('VERCEL') != '1':
+        print("=== 本地开发模式启动 ===", file=sys.stderr)
+        
+        missing_envs = []
+        if not DEEPSEEK_API_KEY:
+            missing_envs.append("DEEPSEEK_API_KEY")
+        if not FEISHU_APP_ID:
+            missing_envs.append("FEISHU_APP_ID")
+        if not FEISHU_APP_SECRET:
+            missing_envs.append("FEISHU_APP_SECRET")
+        
+        if missing_envs:
+            print(f"警告：缺少环境变量: {', '.join(missing_envs)}", file=sys.stderr)
+            print("请在Vercel环境变量中配置这些变量", file=sys.stderr)
+        
+        port = int(os.environ.get("PORT", 5000))
+        app.run(host='0.0.0.0', port=port, debug=False)
+    else:
+        print("=== Vercel环境，跳过app.run() ===", file=sys.stderr)
